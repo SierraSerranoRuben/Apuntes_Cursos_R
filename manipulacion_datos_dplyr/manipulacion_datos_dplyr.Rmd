@@ -1,0 +1,192 @@
+---
+title: "Manipulación de Datos con dplyr"
+author: "Rubén Sierra Serrano"
+date: "2024-03-23"
+output:
+  pdf_document:
+    toc: true
+  word_document:
+    toc: true
+header-includes:
+- \usepackage{makeidx}
+- \makeindex
+- \renewcommand{\contentsname}{Índice}
+- \renewcommand{\tablename}{Tabla}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Transformación de datos
+
+A lo largo del siguiente documento, se trabajará con el conjunto de datos \textit{counties}, el cual corresponde a un censo de los Estados Unidos del año 2015.
+
+La función **glimpse()** del paquete dplyr permite visualizar los primeros valores de todas las variables de un DataFrame, así como el tipo de dato de cada una.
+
+```{r, echo = FALSE}
+counties <- readRDS("counties.rds")
+```
+
+```{r, message = FALSE}
+library(dplyr)
+glimpse(counties)
+```
+
+\newpage
+
+Para seleccionar variables dentro del DataFrame se puede emplear la función **select()**.
+
+```{r}
+counties %>%
+  select(state, county, income, poverty)
+```
+
+## La función count()
+
+La función **count()** cuenta el número de observaciones de un DataFrame.
+
+```{r}
+counties %>%
+  count()
+```
+Se puede especificar un atributo dentro del DataFrame para conocer el número de observaciones que pertenecen a cada valor de la variable.
+
+```{r}
+counties %>%
+  count(state)
+```
+
+**count()** tiene un parámetro \texttt{sort} que permite ordenar las observaciones según la cantidad de ocurrencias del valor en el atributo especificado.
+
+```{r}
+counties %>%
+  count(state, sort = TRUE)
+```
+
+Otro parámetro importante de **count()** es \texttt{wt}, que se utiliza para especificar una variable que contiene pesos para cada observación. Esto significa que en lugar de contar cada observación como una unidad, **count()** utiliza los valores de la variable especificada en \texttt{wt} para ponderar las observaciones.
+
+```{r}
+counties %>%
+  count(state, wt = population, sort = TRUE)
+```
+
+\newpage
+
+## Las funciones slice_min() y slice_max()
+
+Ambas funciones se utilizan para seleccionar filas de un DataFrame basadas en los valores mínimos o máximos de una variable específica.
+
+- **slice_min()**: Esta función devuelve las filas con los valores mínimos de la variable especificada.
+- **slice_max()**: Esta función devuelve las filas con los valores máximos de la variable especificada.
+
+Ambas funciones toman como argumentos el DataFrame y la variable por la cual se desea realizar la selección. Además, pueden tomar un argumento adicional opcional \texttt{n} para especificar cuántas filas deseas mantener. Si no se especifica este argumento, la función devolverá todas las filas que tienen el valor mínimo o máximo en la variable especificada.
+
+```{r}
+counties_selected <- counties %>% select(state, county, 
+                                         population, unemployment, income)
+
+counties_selected %>%
+  group_by(state) %>%
+  slice_max(population, n = 1)
+```
+
+```{r}
+counties_selected %>%
+  group_by(state) %>%
+  slice_min(unemployment, n = 1)
+```
+
+# Seleccionar y transformar datos
+
+## La función select()
+
+Anteriormente se ha mencionado que la función **select()** puede ser empleada para seleccionar atributos dentro de un DataFrame. Sin embargo, dicha función ofrece varias configuraciones adicionales para facilitar la selección de múltiples atributos de forma simultánea con los llamados $\texttt{select}\_\texttt{helpers}$.
+
+```{=tex}
+\begin{center}
+\begin{tabular}{|l|l|}
+\hline
+$\textbf{select\_helper}$ & \textbf{Descripción} \\
+\hline
+-\texttt{var} & Selecciona todas las variables excepto \texttt{var} \\
+\hline
+: & Selecciona un rango \\
+\hline
+contains() & Selecciona variables cuyo nombre contiene la cadena de texto \\
+\hline
+ends\_with() & Selecciona variables cuyo nombre termina con la cadena de caracteres \\
+\hline
+everything() & Selecciona todas las columnas \\
+\hline
+matches() & Selecciona las variables cuyos nombres coinciden con una expresión regular \\
+\hline
+num\_range() & Selecciona las variables por posición \\
+\hline
+one\_of() & Selecciona variables cuyos nombres están en un grupo de nombres \\
+\hline
+start\_with() & Selecciona variables cuyos nombres empiezan con la cadena de caracteres \\
+\hline
+\end{tabular}
+\end{center}
+```
+
+Para más información: **?select_helpers**
+
+Algunos ejemplos de uso:
+
+```{r}
+counties %>%
+  select(state, county, population, professional:production) %>%
+  arrange(desc(service))
+```
+
+\newpage
+
+```{r}
+counties %>%
+  select(state, county, population, ends_with("work")) %>%
+  filter(public_work > 50)
+```
+
+## La función rename()
+
+La función **rename()** sirve para renombrar columnas.
+
+```{r}
+counties %>%
+  count(state) %>%
+  rename(num_counties = n)
+``` 
+
+\newpage
+
+Se puede renombrar directamente al seleccionar los atributos con **select()**
+
+```{r}
+counties %>%
+  select(state, county, poverty_rate = poverty)
+```
+
+## La función relocate()
+
+La función **relocate()** es empleada para cambiar de forma sencilla la posición de un atributo dentro del DataFrame. Para ello, emplea los parámetros .\texttt{before} y .\texttt{after} así como los $\texttt{select}\_\texttt{helpers}$.
+
+```{r}
+counties %>%
+  relocate(region, .before = state)
+```
+
+\newpage
+
+```{r}
+counties %>%
+  relocate(state, .after = region)
+```
+
+```{r}
+counties_selected %>%
+  relocate(state, .after = last_col())
+```

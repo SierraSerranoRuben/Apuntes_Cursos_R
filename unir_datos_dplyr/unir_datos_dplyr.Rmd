@@ -1,0 +1,614 @@
+---
+title: "Unión de DataFrames con dplyr"
+author: "Rubén Sierra Serrano"
+date: "2024-03-25"
+output:
+  pdf_document:
+    toc: true
+  html_document:
+    toc: true
+    df_print: paged
+  word_document:
+    toc: true
+header-includes: 
+- \usepackage{tikz}
+- \usetikzlibrary{positioning, arrows.meta, shapes.multipart, shapes, backgrounds, trees}
+- \usepackage{makeidx}
+- \makeindex
+- \renewcommand{\contentsname}{Índice}
+- \renewcommand{\tablename}{Tabla}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# La función inner_join()
+
+A lo largo del documeto se va a trabajar con diversos DataFrames procedentes de la empresa LEGO.
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+library(dplyr)
+library(tidyr)
+sets <- readRDS("sets.rds")
+themes <- readRDS("themes.rds")
+inventories <- readRDS("inventories.rds")
+inventory_parts <- readRDS("inventory_parts.rds")
+```
+
+El DataFrame "base" se llama \texttt{sets}, dicho DataFrame tiene una columna llamada $\texttt{theme}\_\texttt{id}$ que no tiene sentido en sí misma, se trata de un identificador, dicho identificador nos permite unir el DataFrame \texttt{sets} con el DataFrame \texttt{themes}.
+
+```{r}
+head(sets)
+head(themes)
+```
+
+\newpage
+
+Para unirlos hay que emplear la función **inner_join()**. Dicha función solo conserva las observaciones que se encuentran en el primer DataFrame y que tienen una coincidencia en el segundo, une ambos DataFrames por una columna común.
+
+```{r}
+sets %>%
+  inner_join(themes, by = c("theme_id" = "id"))
+```
+
+Esto une el primer DataFrame \texttt{sets} con el segundo DataFrame \texttt{themes}. La sintaxis **by = c("theme_id" = "id")** indica que se está uniendo las tablas donde el valor de $\texttt{theme}\_\texttt{id}$ en el conjunto de datos \texttt{sets} es igual al valor de \texttt{id} en el conjunto de datos \texttt{themes}. Por tanto, es una relación de uno a uno (1:1).
+
+La función **inner_join()** tiene el argumento \texttt{suffix}, el cuál permite añadir sufijos a las columnas de los conjuntos de datos de entrada que tienen nombres de columna en común, pero que no son los campos de unión.
+
+```{r}
+sets %>%
+  inner_join(themes, by = c("theme_id" = "id"), suffix = c("_set", "_theme"))
+```
+
+\newpage
+
+Nótese que el uso del operador pipe **%>%** permite emplear otras funciones dentro de la consulta con el fin de obtener más información:
+
+```{r}
+sets %>%
+  inner_join(themes, by = c("theme_id" = "id"), suffix = c("_set", "_theme")) %>%
+  count(name_theme, sort = TRUE)
+```
+
+### Unión de una relación de uno a varios (1:N)
+
+El DataFrame \texttt{inventories} tiene una identificador $\texttt{set}\_\texttt{num}$ que lo relaciona con el DataFrame \texttt{sets}.
+
+```{r}
+head(inventories)
+```
+
+\newpage
+
+Al unir ambos DataFrames de la misma forma que se menciono anteriormente (el identificador que permite unir ambos DataFrame tiene el mismo nombre, por tanto, no es necesario igualar el identificador dentro del parámetro \texttt{by} en contraposición al código anterior):
+
+```{r}
+sets %>%
+  inner_join(inventories, by = c("set_num"))
+```
+
+Nótese que previamente el DataFrame tenía 4.977 observaciones y que tras la unión, tiene 5.056 observaciones. Esto se debe a que se trata de una relación uno a varios (1:N); es decir, un mismo set puede tener varias versiones. Para corroborarlo, se puede filtrar el DataFrame resultante de tal forma que sólo se muestre la primera versión:
+
+```{r}
+sets %>%
+  inner_join(inventories, by = c("set_num")) %>%
+  filter(version == 1)
+```
+
+Este DataFrame tiene 4.976 observaciones, lo que significa que un set no tiene una primera versión.
+
+\newpage
+
+### Unión de más de dos DataFrames
+
+Gracias al operador pipe **%>%** es posible unir de manera simultáneamente más de dos DataFrames con la función **inner_join()**, aquí toma especial relevancia el argumento \texttt{suffix} para no confundir atributos:
+
+```{r}
+sets %>%
+  inner_join(inventories, by = c("set_num")) %>%
+  inner_join(themes, by = c("theme_id" = "id"), suffix = c("_set", "_theme"))
+```
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}[entity/.style={rectangle, draw=blue, thick, fill=blue!20},
+                    attribute/.style={rectangle, draw=black, fill=white},
+                    every edge/.style={draw=black, thick}]
+
+  % Entities
+  \node[entity] (sets) at (4,0) {
+    \begin{tabular}{ll}
+      \textbf{sets} & \\
+      set\_num & chr \\
+      name & chr \\
+      year & dbl \\
+      theme\_id & dbl \\
+    \end{tabular}
+  };
+  
+  \node[entity] (inventories) at (8,0) {
+    \begin{tabular}{ll}
+      \textbf{inventories} & \\
+      id & dbl \\
+      version & dbl \\
+      set\_num & chr \\
+    \end{tabular}
+  };
+
+  \node[entity] (themes) at (0,0) {
+    \begin{tabular}{ll}
+      \textbf{themes} & \\
+      id & dbl \\
+      name & chr \\
+      parent\_id & dbl \\
+    \end{tabular}
+  };
+
+  
+  % Attribute Links with offsets to match the specific attribute positions
+  \node[attribute] (setnum_sets) at ([yshift=9pt] sets.east) {};
+  \node[attribute] (setnum_inventories) at ([yshift=-18pt] inventories.west) {};
+  \node[attribute] (themeid_sets) at ([yshift=-23pt] sets.west) {};
+  \node[attribute] (id_themes) at ([yshift=6pt] themes.east) {};
+  
+  \draw[-, thick] (setnum_inventories) -- (setnum_sets);
+  \draw[-, thick] (themeid_sets) -- (id_themes);
+  
+\end{tikzpicture}
+\end{center}
+```
+
+\newpage
+
+# Uniones por la izquierda y por la derecha
+
+## La función left_join()
+
+La función **left_join()** combina dos DataFrames basándose en una columna de identificación, manteniendo todas las filas del primer DataFrame (llamado "izquierdo") e incorporando las correspondientes filas del segundo DataFrame (llamado "derecho") que coincidan con la columna de identificación. Si no hay coincidencias en el segundo DataFrame, se asignan valores NA a las columnas correspondientes.
+
+En el siguiente código se juntan los DataFrames \texttt{inventories} e $\texttt{inventory}\_\texttt{part}$, de tal forma que el DataFrame resultante guarda las piezas de LEGO dentro de cada set.
+
+```{r}
+inventory_parts_joined <- inventories %>% 
+  inner_join(inventory_parts, by = c("id" = "inventory_id")) %>%
+  select(-id, -version) %>%
+  arrange(desc(quantity))
+
+head(inventory_parts_joined)
+```
+
+A continuación, se obtiene los sets del batmobile y del batwing:
+
+```{r,message = FALSE}
+batmobile <- inventory_parts_joined %>%
+  filter(set_num == "7784-1") %>%
+  select(-set_num)
+
+batmobile
+```
+
+```{r, message = FALSE}
+batwing <- inventory_parts_joined %>%
+  filter(set_num == "70916-1") %>%
+  select(-set_num)
+
+batwing
+```
+
+Por tanto, los DataFrames albergan las piezas de cada set, su color y su cantidad.
+
+El siguiente DataFrame muestra las piezas que comparten ambos sets y el color y la cantidad de estas:
+
+```{r, warning = FALSE, message = FALSE}
+batmobile %>%
+  inner_join(batwing, by = c("part_num"), suffix = c("_batmobile", "_batwing"))
+```
+
+\newpage
+
+Al usar **left_join()**, el DataFrame resultante contiene todas las observaciones del DataFrame izquierdo y las que compartan ambos, en este caso el DataFrame izquierdo es \texttt{batmobile}:
+
+```{r, warning = FALSE, message = FALSE}
+batmobile %>%
+  left_join(batwing, by = c("part_num"), suffix = c("_batmobile", "_batwing"))
+```
+
+El argumento \texttt{by} permite unir empleando varias columnas de identificación (es válido para cualquier función de de la familia **join()**)
+
+```{r, warning = FALSE, message = FALSE}
+batmobile %>%
+  left_join(batwing, by = c("part_num","color_id"), suffix = c("_batmobile", "_batwing"))
+```
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}
+    % Inner Join
+    \begin{scope}
+        \clip (0,0) circle (1.5cm);
+        \fill[yellow] (1.5,0) circle (1.5cm);
+    \end{scope}
+    \draw (0,0) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (1.5,0) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (0.75,-2.5) {$\textbf{inner\_join()}$};
+
+    % Left Join
+    \begin{scope}[shift={(5cm,0)}]
+        \fill[red] (0,0) circle (1.5cm);
+        \begin{scope}
+            \clip (0,0) circle (1.5cm);
+            \fill[yellow] (1.5,0) circle (1.5cm);
+        \end{scope}
+    \end{scope}
+    \draw (5,0) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (6.5,0) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (5.75,-2.5) {$\textbf{left\_join()}$};
+\end{tikzpicture}
+\end{center}
+```
+
+\newpage
+
+## La función right_join()
+
+La función **right_join()** combina dos DataFrames basándose en una columna de identificación, manteniendo todas las filas del segundo DataFrame (el derecho) e incorporando las correspondientes filas del primer DataFrame (el izquierdo) que coincidan con la columna de identificación. Si no hay coincidencias en el primer DataFrame, se asignan valores NA a las columnas correspondientes. 
+
+```{r, warning = FALSE, message = FALSE}
+batmobile %>%
+  right_join(batwing, by = c("part_num","color_id"), suffix = c("_batmobile", "_batwing"))
+```
+
+Nótese que **right_join()** y **left_join()** son funciones complementarias que realizan operaciones de unión en dos conjuntos de datos, pero en direcciones opuestas, por tanto, son "imágenes espejo".
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}
+    % Inner Join
+    \begin{scope}
+        \clip (0,0) circle (1.5cm);
+        \fill[yellow] (1.5,0) circle (1.5cm);
+    \end{scope}
+    \draw (0,0) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (1.5,0) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (0.75,-2.5) {$\textbf{inner\_join()}$};
+
+    % Left Join
+    \begin{scope}[shift={(5cm,0)}]
+        \fill[red] (0,0) circle (1.5cm);
+        \begin{scope}
+            \clip (0,0) circle (1.5cm);
+            \fill[yellow] (1.5,0) circle (1.5cm);
+        \end{scope}
+    \end{scope}
+    \draw (5,0) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (6.5,0) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (5.75,-2.5) {$\textbf{left\_join()}$};
+
+    % Right Join
+    \begin{scope}[shift={(10cm,0)}]
+        \fill[green] (1.5,0) circle (1.5cm); % Fill for B exclusive
+        \begin{scope}
+            \clip (1.5,0) circle (1.5cm);
+            \fill[yellow] (0,0) circle (1.5cm); % Intersection
+        \end{scope}
+    \end{scope}
+    \draw (10,0) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (11.5,0) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (10.75,-2.5) {$\textbf{right\_join()}$};
+\end{tikzpicture}
+\end{center}
+```
+
+\newpage
+
+### La función replace_na()
+
+
+Al trabajar con DataFrames obtenidos mediante alguna de las funciones mencionadas anteriormente, la presencia de NAs en los datos puede resultar molesta. Para abordar este problema, se puede emplear la función **replace_na()** de la librería **tidyr**, la cual asigna un valor específico a los NAs, permitiendo así manejarlos de manera más conveniente en el análisis de los datos.
+
+```{r}
+sets %>%
+  count(theme_id) %>%
+  right_join(themes, by = c("theme_id" = "id")) %>%
+  replace_na(list(n = 0))
+```
+
+Al comprobarlo, efectivamente no hay NAs en el atributo \texttt{n}:
+
+```{r}
+sets %>%
+  count(theme_id) %>%
+  right_join(themes, by = c("theme_id" = "id")) %>%
+  replace_na(list(n = 0)) %>%
+  filter(is.na(n))
+```
+
+\newpage
+
+## Relaciones de DataFrames consigo mismos
+
+Una relación de DataFrame consigo mismo es una situación en la que un DataFrame se asocia con sí misma mediante una relación definida por uno o más campos. Esta práctica es común cuando se necesita modelar datos que tienen una estructura jerárquica o que están vinculados a sí mismos de alguna manera significativa.
+
+El DataFrame \texttt{themes} contiene dos atributos: \texttt{id} y $\texttt{parent}\_\texttt{id}$. La presencia de este último atributo indica que el DataFrame establece una relación consigo mismo, lo que implica la existencia de una jerarquía dentro de los datos que representa.
+
+```{r}
+themes
+```
+
+Por ejemplo, los temas \texttt{Arctic} \texttt{Technic}, \texttt{Competition}, \texttt{Expert} \texttt{Builder} y \texttt{Model} todos tienen el $\texttt{parent}\_\texttt{id}$ 1. Observando la primera columna, se puede ver que ese ID corresponde al primer tema, llamado \texttt{Technic}. También se puede observar que las siguientes cinco filas tienen el \texttt{parent}_\texttt{id} 5, el cual corresponde al tema \texttt{Model}.
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}[
+  level 1/.style={sibling distance=35mm},
+  level 2/.style={sibling distance=20mm},
+  every node/.style={draw,rectangle}
+]
+
+\node {Technic}
+  child {node {Arctic Technic}}
+  child {node {Competition}}
+  child {node {Expert Builder}}
+  child {node {Model}
+    child {node {Airport}}
+    child {node {Construction}}
+    child {node {Farm}}
+    child {node {Fire}}
+    child {node {Harbor}}
+  };
+
+\end{tikzpicture}
+\end{center}
+```
+
+\newpage
+
+Al aplicar **inner_join()** al DataFrame consigo mismo, se obtiene un DataFrame que muestra las relaciones padre-hijo:
+
+```{r}
+themes %>%
+  inner_join(themes, by = c("parent_id" = "id"), suffix = c("_hijo","_padre"))
+```
+
+Al aplicar otra vez **inner_join()** se obtiene también las relaciones padre-nieto:
+
+```{r}
+themes %>% 
+  inner_join(themes, by = c("id" = "parent_id"), suffix = c("_padre", "_hijo")) %>%
+  inner_join(themes, by = c("id_hijo" = "parent_id"), suffix = c("_padre", "_nieto"))
+```
+
+\newpage
+
+# La función full_join()
+
+La función **full_join()** une dos DataFrames manteniendo todas las filas de ambos DataFrames, y rellenando con valores nulos en aquellos casos donde no hay coincidencias en la columna (o columnas) común. Esto significa que el resultado final contendrá todas las combinaciones posibles de filas de ambos DataFrames, incluso si no hay una correspondencia directa entre ellos en la columna utilizada para la unión.
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}
+    % Inner Join
+    \begin{scope}
+        \clip (0,0) circle (1.5cm);
+        \fill[yellow] (1.5,0) circle (1.5cm);
+    \end{scope}
+    \draw (0,0) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (1.5,0) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (0.75,-2.5) {$\textbf{inner\_join()}$};
+
+    % Left Join
+    \begin{scope}[shift={(5cm,0)}]
+        \fill[red] (0,0) circle (1.5cm);
+        \begin{scope}
+            \clip (0,0) circle (1.5cm);
+            \fill[yellow] (1.5,0) circle (1.5cm);
+        \end{scope}
+    \end{scope}
+    \draw (5,0) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (6.5,0) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (5.75,-2.5) {$\textbf{left\_join()}$};
+
+    % Right Join
+    \begin{scope}[shift={(10cm,0)}]
+        \fill[green] (1.5,0) circle (1.5cm);
+        \begin{scope}
+            \clip (1.5,0) circle (1.5cm);
+            \fill[yellow] (0,0) circle (1.5cm);
+        \end{scope}
+    \end{scope}
+    \draw (10,0) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (11.5,0) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (10.75,-2.5) {$\textbf{right\_join()}$};
+
+    % Full Join
+    \begin{scope}[shift={(0cm,-5)}]
+        \fill[red] (0,0) circle (1.5cm); % A exclusive
+        \fill[green] (1.5,0) circle (1.5cm); % B exclusive
+        \begin{scope}
+            \clip (0,0) circle (1.5cm);
+            \fill[yellow] (1.5,0) circle (1.5cm); % Intersection
+        \end{scope}
+    \end{scope}
+    \draw (0, -5) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (1.5 , -5) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (0.75,-7.5) {$\textbf{full\_join()}$};
+\end{tikzpicture}
+\end{center}
+```
+
+```{r}
+batmobile %>%
+  full_join(batwing, by = c("part_num", "color_id"), suffix = c("_batmobile","_batwing"))
+```
+
+\newpage
+
+De nuevo, no resulta cómodo trabajar con valores NAs dentro del DataFrame, por tanto, es recomendable sustituirlos con **repace_na()**:
+
+```{r}
+batmobile %>%
+  full_join(batwing, by = c("part_num", "color_id"), suffix = c("_batmobile","_batwing")) %>%
+  replace_na(list(quantity_batmobile = 0,
+                  quantity_batwing = 0))
+```
+
+\newpage
+
+# Las uniones filtro
+
+## La función semi_join()
+
+La función **semi_join()** devuelve todas las filas del primer DataFrame que tienen una correspondencia en el segundo DataFrame, pero no agrega las columnas del segundo DataFrame al resultado final.
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}
+    % Inner Join
+    \begin{scope}
+        \clip (0,0) circle (1.5cm);
+        \fill[yellow] (1.5,0) circle (1.5cm);
+    \end{scope}
+    \draw (0,0) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (1.5,0) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (0.75,-2.5) {$\textbf{inner\_join()}$};
+
+    % Left Join
+    \begin{scope}[shift={(5cm,0)}]
+        \fill[red] (0,0) circle (1.5cm);
+        \begin{scope}
+            \clip (0,0) circle (1.5cm);
+            \fill[yellow] (1.5,0) circle (1.5cm);
+        \end{scope}
+    \end{scope}
+    \draw (5,0) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (6.5,0) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (5.75,-2.5) {$\textbf{left\_join()}$};
+
+    % Right Join
+    \begin{scope}[shift={(10cm,0)}]
+        \fill[green] (1.5,0) circle (1.5cm);
+        \begin{scope}
+            \clip (1.5,0) circle (1.5cm);
+            \fill[yellow] (0,0) circle (1.5cm);
+        \end{scope}
+    \end{scope}
+    \draw (10,0) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (11.5,0) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (10.75,-2.5) {$\textbf{right\_join()}$};
+
+    % Full Join
+    \begin{scope}[shift={(0cm,-5)}]
+        \fill[red] (0,0) circle (1.5cm); % A exclusive
+        \fill[green] (1.5,0) circle (1.5cm); % B exclusive
+        \begin{scope}
+            \clip (0,0) circle (1.5cm);
+            \fill[yellow] (1.5,0) circle (1.5cm); % Intersection
+        \end{scope}
+    \end{scope}
+    \draw (0, -5) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (1.5 , -5) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (0.75,-7.5) {$\textbf{full\_join()}$};
+
+    % Semi Join
+     \begin{scope}[shift={(5cm,-5)}]
+        \clip (0,0) circle (1.5cm);
+        \fill[yellow] (1.5,0) circle (1.5cm);
+    \end{scope}
+    \draw (5,-5) circle (1.5cm) node[left] {\textbf{A}};
+    \draw[dashed] (6.5,-5) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (5.75,-7.5) {$\textbf{semi\_join()}$};
+\end{tikzpicture}
+\end{center}
+```
+
+```{r}
+batmobile %>%
+  semi_join(batwing, by = c("color_id","part_num"))
+```
+
+\newpage
+
+## La función anti_join()
+
+La función **anti_join()** devuelve todas las filas del primer DataFrame que no tienen una correspondencia en el segundo DataFrame, ignorando las filas que tienen coincidencias.
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}
+    % Inner Join
+    \begin{scope}
+        \clip (0,0) circle (1.5cm);
+        \fill[yellow] (1.5,0) circle (1.5cm);
+    \end{scope}
+    \draw (0,0) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (1.5,0) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (0.75,-2.5) {$\textbf{inner\_join()}$};
+
+    % Left Join
+    \begin{scope}[shift={(5cm,0)}]
+        \fill[red] (0,0) circle (1.5cm);
+        \begin{scope}
+            \clip (0,0) circle (1.5cm);
+            \fill[yellow] (1.5,0) circle (1.5cm);
+        \end{scope}
+    \end{scope}
+    \draw (5,0) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (6.5,0) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (5.75,-2.5) {$\textbf{left\_join()}$};
+
+    % Right Join
+    \begin{scope}[shift={(10cm,0)}]
+        \fill[green] (1.5,0) circle (1.5cm);
+        \begin{scope}
+            \clip (1.5,0) circle (1.5cm);
+            \fill[yellow] (0,0) circle (1.5cm);
+        \end{scope}
+    \end{scope}
+    \draw (10,0) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (11.5,0) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (10.75,-2.5) {$\textbf{right\_join()}$};
+
+    % Full Join
+    \begin{scope}[shift={(0cm,-5)}]
+        \fill[red] (0,0) circle (1.5cm); % A exclusive
+        \fill[green] (1.5,0) circle (1.5cm); % B exclusive
+        \begin{scope}
+            \clip (0,0) circle (1.5cm);
+            \fill[yellow] (1.5,0) circle (1.5cm); % Intersection
+        \end{scope}
+    \end{scope}
+    \draw (0, -5) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (1.5 , -5) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (0.75,-7.5) {$\textbf{full\_join()}$};
+
+    % Semi Join
+     \begin{scope}[shift={(5cm,-5)}]
+        \clip (0,0) circle (1.5cm);
+        \fill[yellow] (1.5,0) circle (1.5cm);
+    \end{scope}
+    \draw (5,-5) circle (1.5cm) node[left] {\textbf{A}};
+    \draw[dashed] (6.5,-5) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (5.75,-7.5) {$\textbf{semi\_join()}$};
+    
+    % Anti Join
+    \begin{scope}[shift={(10cm,-5)}]
+        \fill[red] (0,0) circle (1.5cm);
+        \begin{scope}
+            \clip (0,0) circle (1.5cm);
+            \fill[white] (1.5,0) circle (1.5cm);
+        \end{scope}
+    \end{scope}
+    \draw (10,-5) circle (1.5cm) node[left] {\textbf{A}};
+    \draw (11.5,-5) circle (1.5cm) node[right] {\textbf{B}};
+    \node at (10.75,-7.5) {$\textbf{anti\_join()}$};
+\end{tikzpicture}
+\end{center}
+```
+
+```{r}
+batmobile %>%
+  anti_join(batwing, by = c("color_id","part_num"))
+```

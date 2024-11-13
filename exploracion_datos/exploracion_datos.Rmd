@@ -1,0 +1,226 @@
+---
+title: "Exploración de Datos con R"
+author: "Rubén Sierra Serrano"
+date: "2024-04-12"
+output:
+  pdf_document:
+    toc: true
+  html_document:
+    toc: true
+    df_print: paged
+  word_document:
+    toc: true
+header-includes: 
+- \usepackage{makeidx}
+- \makeindex
+- \renewcommand{\contentsname}{Índice}
+- \renewcommand{\tablename}{Tabla}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Exploración de datos categóricos
+
+En el siguiente documento se va a trabajar con el DataFrame \texttt{comics}.
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+comics <- read.csv("comics.csv")
+cars <- read.csv("cars04.csv")
+```
+
+La función $\texttt{prop}$.$\texttt{table}$ se utiliza para crear tablas de frecuencia relativa a partir de tablas de frecuencia absoluta, la estructura de la función se muestra a continuación.
+
+prop.table(x, margin=NULL)
+x: tabla de frecuencia.
+margin: valor de 1 si se desean proporciones por filas, 2 si se desean por columnas, NULL si se desean frecuencias globales.
+
+```{r}
+options(scipen = 999, digits = 3)
+tabla_cnt <- table(comics$id, comics$align)
+tabla_cnt
+prop.table(tabla_cnt)
+```
+
+```{r}
+prop.table(tabla_cnt, 1)
+prop.table(tabla_cnt, 2)
+prop.table(tabla_cnt, NULL)
+```
+
+```{r}
+ggplot(comics, aes(x = id, fill = align)) +
+  geom_bar()
+  
+ggplot(comics, aes(x = id, fill = align)) +
+  geom_bar(position = "fill") + 
+  ylab("Proporción") + 
+  xlab("Alienación")
+```
+## Eliminar categorías
+
+Para eliminar categorías que no nos resultan útiles a la hora de explorar los datos, ya sea porque no las estamos estudiando, contienen outliers, tienen muchos NaNs, etc., podemos emplear la función **droplevels()** y el paquete \texttt{dplyr} de la siguiente forma:
+
+```{r}
+comics_filtered <- comics %>%
+  filter(align != "Reformed Criminals") %>%
+  filter(align != "Unknown") %>%
+  filter(align != "NA") %>%
+  droplevels()
+```
+
+## Distribución de una variable
+
+Para calcular la tabla de conteos de una variable podemos emplear la función **table** e introducir como parámetro un vector de la siguiente forma:
+
+```{r}
+table(comics_filtered$id)
+```
+Esto se conoce como la distribución marginal de la variable \texttt{id}.
+
+Resulta sencillo crear el gráfico de barras de dicha distribución marginal:
+
+```{r}
+ggplot(comics_filtered, aes(x = id)) +
+  geom_bar()
+```
+
+Otra manera útil de obtener la distribución de una variable es condicionarla a un valor particular de otra variable (faceting: divide los datos en subconjuntos en función de los niveles de una variable categórica). Por ejemplo, podríamos estar interesados en la variable \texttt{id} de todos los personajes de la categoría \texttt{Neutral} de la variable \texttt{align}; para ello:
+
+```{r}
+ggplot(comics_filtered, aes(x = id)) +
+  geom_bar() +
+  facet_wrap(~align)
+```
+
+# Exploración de datos numéricos
+
+Para realizar la exploración de datos numéricos emplearemos el dataset \texttt{cars}. 
+
+```{r}
+str(cars)
+```
+
+Una primera aproximación útil a un dato numérico es mediante un diagrama de puntos en el que cada caso es representado por un punto:
+
+```{r}
+ggplot(cars, aes(x = weight)) +
+  geom_dotplot(dotsize = 0.4)
+```
+
+Este es un tipo de gráfico en el que no hay pérdida de información; sin embargo, para datasets de gran tamaño, los puntos se solapan y pueden dificultar una lectura efectiva del gráfico. En estos casos, los histogramas pueden ser de gran utilidad, ya que agrupan los datos en barras de las cuales obtenemos su frecuencia (el número de barras puede ser modificado por el parámetro \texttt{bins}): 
+
+```{r}
+ggplot(cars, aes(x = weight)) +
+  geom_histogram()
+```
+
+```{r}
+ggplot(cars, aes(x = weight)) +
+  geom_histogram(bins = 10)
+```
+
+En los histogramas si que hay cierta pérdida de información pero permiten contemplar de manera más precisa la distribución de la variable estudiada.
+
+Se pueden realizar también histogramas de una categoría en concreto gracias a las facetas:
+
+```{r}
+ggplot(cars, aes(x = weight)) + 
+  geom_histogram() +
+  facet_wrap(~suv)
+```
+
+Una gráfica muy similar al histograma es la función de densidad que, en contraposición a la naturaleza discreta del histograma, es continua al representar la distribución de la variable empleando una línea suave:
+
+```{r}
+ggplot(cars, aes(x = weight)) +
+  geom_density()
+```
+
+Para modificar la estimación de densidad del kernel (aplicación de suavizado para la estimación de la densidad), podemos modificar el argumento $\texttt{bw}$(bandwidth) de la función:
+
+```{r}
+ggplot(cars, aes(x = weight)) +
+  geom_density(bw = 1000)
+```
+
+Otro gráfico interesante que muestra la naturaleza de la variable es el gráfico de caja y bigotes en el que se muestra la dispersión y la simetría, así como los cuartiles, la media, la mediana y los outliers:
+
+```{r}
+ggplot(cars, aes(x = weight)) +
+  geom_boxplot()
+```
+
+Podemos filtrar valores de una variable a la hora de graficar:
+
+```{r}
+cars %>%
+  filter(eng_size < 2.0) %>%
+  ggplot(aes(x = hwy_mpg)) +
+  geom_histogram()
+```
+
+```{r}
+common_cyl <- filter(cars, ncyl %in% c(4, 6, 8))
+
+ggplot(common_cyl, aes(x = as.factor(ncyl), y = city_mpg)) +
+  geom_boxplot()
+
+ggplot(common_cyl, aes(x = city_mpg, fill = as.factor(ncyl))) +
+  geom_density(alpha = .3)
+```
+
+## Visualización en dimensiones más altas
+
+Para graficar la asociación entre tres variables, se puede utilizar una rejilla de facetas (facet grid). Esto permite desglosar un gráfico de densidad del MSRP por dos variables categóricas, ubicando una en las filas y otra en las columnas de la rejilla.
+
+```{r}
+ggplot(cars, aes(x = msrp)) +
+  geom_density() + 
+  facet_grid(pickup ~ rear_wheel)
+```
+
+Sin embargo, este tipo de gráfico puede resultar confuso al no mostrar claramente la disposición de las variables, problema que se resuelve con una opción adicional en la configuración de la rejilla:
+
+```{r}
+ggplot(cars, aes(x = msrp)) +
+  geom_density() + 
+  facet_grid(pickup ~ rear_wheel, labeller = label_both)
+```
+
+Si formamos una tabla de contingencia con las variables de tracción trasera y tipo de vehículo (pickup), observamos que hay relativamente pocos vehículos con tracción trasera en este conjunto de datos:
+
+```{r}
+table(cars$rear_wheel, cars$pickup)
+```
+
+Los diagramas de densidad se normalizan para que tengan todos el mismo área y que no se vean afectados por la cantidad de observaciones.
+
+# Resumenes numéricos
+
+## Medidas de centro
+
+- Media aritmética:
+
+```{r}
+sum(is.na(cars$weight))
+weight_cars <- na.omit(cars$weight)
+sum(is.na(weight_cars))
+mean(weight_cars)
+```
+
+- Mediana:
+
+```{r}
+median(weight_cars)
+```
+
+```{r}
+names(sort(-table(weight_cars)))[1]
+```

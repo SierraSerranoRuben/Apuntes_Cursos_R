@@ -1,0 +1,335 @@
+---
+title: "Introducción a Tidyverse"
+author: "Rubén Sierra Serrano"
+date: "2024-03-06"
+output:
+  pdf_document:
+    toc: yes
+header-includes:
+  - \usepackage{makeidx}
+  - \makeindex
+  - \renewcommand{\contentsname}{Índice}
+  - \renewcommand{\tablename}{Tabla}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Manipulación de datos con dplyr
+
+Tidyverse es una colección de herramientas destinadas para el análisis de datos, dichas herramientas permiten la manipulación y la  visualización de los datos. 
+
+Se va a trabajar con el DataFrame \textbf{gapminder} presente en la librería homónima. Dicho DataFrame recoge indicadores sociales y económicos de los países como su esperanza de vida o su PIB a lo largo de varios años.
+
+```{r, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(gapminder)
+gapminder
+```
+
+## La función filter()
+
+La función **filter()** permite observar un subconjunto del conjunto de datos que cumpla con una condición particular. Dicha función suele estar acompañada del operador pipe **%>%** que toma el resultado de una expresión y lo pasa como primer argumento a la siguiente expresión, facilitando la composición de operaciones al permitir encadenar funciones de manera más clara y concisa.
+
+Sin operador pipe:
+
+```{r}
+filter(gapminder, year == 2007)
+```
+
+Con operador pipe:
+
+```{r}
+gapminder %>% 
+  filter(year == 2007)
+```
+
+No se esta eliminando ningun dato del resto del DataFrame, solo selecciona un conjunto que cumple con una condición, en este caso, son los datos de todos los países en el año 2007.
+
+La función **filter()** permite discriminar bajo varias condiciones
+
+Sin operador pipe:
+
+```{r}
+filter(gapminder, year == 2007, country == "China")
+```
+Con operador pipe:
+
+```{r}
+gapminder %>%
+  filter(year == 2007, country == "China")
+```
+
+\newpage
+
+## La función arrange()
+
+La función **arrange()** ordena las observaciones de un dataset en orden ascendente o descendente según una de sus variables. Puede también ser empleada con el operador pipe **%>%**.
+
+Para ordenar de forma descendiente el dataset según la variable $\texttt{gdpPercap}$:
+
+```{r}
+gapminder %>%
+  arrange(desc(gdpPercap))
+```
+
+El operador pipe permite combinar dos funciones, de tal forma que permite primero aplicar la función **filter()** y luego la función **arrange()**, de tal forma que primero filtra y luego organiza:
+
+```{r}
+gapminder %>%
+  filter(country == "Spain") %>%
+  arrange(desc(gdpPercap))
+```
+
+\newpage
+
+Y en sentido ascendente sería:
+
+```{r}
+gapminder %>%
+  filter(country == "Spain") %>%
+  arrange(gdpPercap)
+```
+
+\newpage 
+
+## La función mutate()
+La función **mutate()** permite la modificación de variables existentes así como la eliminación y creación (a partir de otras) de variables.
+
+Uso de **mutate()** para modificar una variable existente; dividir la variable $\texttt{pop}$ (población) entre un millón:
+
+```{r}
+gapminder %>%
+  mutate(pop = pop / 1e6)
+```
+
+Nótese que no se esta modificando al dataset original, solo esta cambiando el valor en el DataFrame que esta devolviendo.
+
+```{r}
+head(gapminder)
+```
+
+\newpage
+
+Uso de **mutate()** para crear una nueva variable a partir de otras; el PIB per cápita viene determinado por la fórmula $\text{PIB per cápita} = \frac{\text{PIB}}{\text{Población}}$, por tanto, para introducir la variable $\texttt{gdp}$ en el DataFrame:
+
+```{r}
+gapminder %>%
+  mutate(gdp = gdpPercap * pop)
+```
+
+De nuevo, el operador pipe permite emplear varias funciones en la misma expresión; lista descendente con los países con mayor PIB total:
+
+```{r}
+gapminder %>%
+  mutate(gdp = gdpPercap * pop) %>%
+  filter(year == 2007) %>%
+  arrange(desc(gdp))
+```
+
+\newpage
+
+# Visualización con ggplot2
+## Diagramas de dispersión
+Cuando se trabaja con un subconjunto de datos con el objetivo de visualizarlo, suele ser útil guardar este subconjunto en una nueva variable. Esto facilita las operaciones posteriores sobre los datos.
+
+```{r}
+gapminder_2007 <- gapminder %>% filter(year == 2007)
+```
+El siguiente gráfico permite el estudio de la relación entre la esperanza de vida y el PIB de un país empleando los datos del año 2007 asignados en la variable $\texttt{gapminder}$\_$\texttt{2007}$ declarada anteriormente.
+```{r}
+ggplot(gapminder_2007, aes(x = gdpPercap, y = lifeExp)) + 
+  geom_point()
+```
+
+- **ggplot(gapminder_2007, aes(x = gdpPercap, y = lifeExp))}**: Este segmento inicia la construcción del gráfico utilizando la función **ggplot()**. Se especifica el conjunto de datos a utilizar ($\texttt{gapminder}$\_$\texttt{2007}$) y se establece la asignación estética con **aes()** de las variables a los ejes del gráfico. En este caso, el eje x se asigna al GDP per capita ($\texttt{gdpPercap}$) y el eje y se asigna a la esperanza de vida ($\texttt{lifeExp}$).
+
+- **geom_point()**: Este comando agrega una capa geométrica al gráfico generado por **ggplot()**. En particular, **geom_point()** indica que se deben representar los datos como puntos en el gráfico, lo que crea un gráfico de dispersión donde cada observación se representa como un punto en el plano cartesiano definido por las variables especificadas anteriormente.
+
+\newpage
+
+## Escalas logarítmicas
+
+Podemos observar en la gráfica anterior que los países con niveles más altos de ingresos exhiben una tendencia hacia una mayor esperanza de vida. Sin embargo, se observa que numerosos países se encuentran agrupados en la porción más izquierda del eje horizontal debido a la amplia variabilidad en los valores del Producto Interno Bruto per cápita, los cuales abarcan múltiples órdenes de magnitud. Con el propósito de superar esta dificultad, se recomienda la adopción de una escala logarítmica, en la cual cada intervalo fijo representa una multiplicación del valor correspondiente. Al implementar esta escala logarítmica sobre el eje horizontal, se evidencia que cada unidad en dicho eje implica un incremento de diez veces en el valor del PIB. Esta medida facilita una representación más clara de la relación existente entre el PIB per cápita y la esperanza de vida, lo que a su vez permite una distinción más nítida entre los países situados en el extremo inferior del espectro. Para la creación de este tipo de gráficos se emplea la instrucción **scale_x_log10()** (en el eje Y sería **scale_y_log10()**).
+
+```{r}
+ggplot(gapminder_2007, aes(x = gdpPercap, y = lifeExp)) + 
+  geom_point() +
+  scale_x_log10()
+```
+
+\newpage
+
+## Configuraciones adicionales
+
+Para representar nuevas variables en los gráficos se puede emplear el color y el tamaño.
+
+### Color
+
+Dentro de la función **ggplot()** se puede especificar el parámetro \texttt{color} de manera que los puntos adquieran color. En el gráfico siguiente, se indica el continente al que pertenece cada país en función del color de su punto:
+
+```{r}
+ggplot(gapminder_2007, aes(x = gdpPercap, y = lifeExp, color = continent)) + 
+  geom_point() +
+  scale_x_log10()
+```
+
+\newpage
+
+### Tamaño 
+
+El gráfico anterior aún permite representar más variables; por ejemplo, la población puede ser representada mediante el tamaño de los puntos en el gráfico de dispersión. Para lograrlo, la función ggplot() cuenta con el parámetro \texttt{size}:
+
+```{r}
+ggplot(gapminder_2007, aes(x = gdpPercap, y = lifeExp, color = continent, 
+                           size = pop)) + 
+  geom_point() +
+  scale_x_log10()
+```
+
+\newpage
+
+## Facetas
+
+ggplot2 permite la división de un gráfico en subgráficos más pequeños según una variable categórica haciendo uso de la instrucción **facet_wrap()**:
+
+```{r}
+ggplot(gapminder, aes(x = gdpPercap, y = lifeExp)) + 
+  geom_point() +
+  scale_x_log10() +
+  facet_wrap(~ year)
+```
+
+\newpage
+
+# Agrupar y resumir
+
+## La función summarize()
+
+La función **summarize()** se utiliza específicamente para generar resúmenes estadísticos a partir de los datos agrupados. La agrupación de datos es un proceso mediante el cual se dividen los datos en grupos basados en una o varias variables clave. Algunas de las funciones más empleadas con **summarize()** son:
+
+- **mean()**: calcula la media
+- **sum()**: calcula la suma de todos los valores
+- **median()**: calcula la mediana
+- **min()** y **max()**: obtienen los valores mínimos y máximos, respectivamente.
+
+```{r}
+gapminder %>%
+    filter(year == 2007) %>%
+    summarize(medianLifeExp = median(lifeExp),
+              maxGdpPercap = max(gdpPercap))
+```
+
+El código anterior crea un DataFrame con la mediana de la variable \texttt{lifeExp} y el valor máximo de \texttt{gdpPercap} de todos los países del DataFrame originial del año 2007.
+
+## La función group_by()
+
+La función **group_by()** se utiliza para agrupar un conjunto de datos según una o varias variables específicas. Este proceso es fundamental en análisis de datos, ya que permite segmentar los datos en grupos más pequeños con base en características comunes. Una vez que se han agrupado los datos, se pueden realizar operaciones de resumen, filtrado o transformación dentro de cada grupo.
+
+```{r}
+gapminder %>%
+  group_by(year) %>%
+  summarize(medianLifeExp = median(lifeExp),
+            maxGdpPercap = max(gdpPercap))
+```
+
+El código anterior crea un DataFrame con la mediana de la variable \texttt{lifeExp} y el valor máximo de \texttt{gdpPercap} de todos los países del DataFrame originial para cada año de la variable \texttt{year}.
+
+**group_by()** permite agrupar en función de dos o más variables
+
+```{r, message = FALSE}
+gapminder %>%
+  group_by(year, continent) %>%
+  summarize(medianLifeExp = median(lifeExp),
+            maxGdpPercap = max(gdpPercap))
+```
+
+El código anterior crea un DataFrame con la mediana de la variable \texttt{lifeExp} y el valor máximo de \texttt{gdpPercap} de todos los países del DataFrame originial para cada año y continente de las variable \texttt{year} y \texttt{continent} respectivamente.
+
+\newpage
+
+### Visualización
+
+```{r, warning = FALSE, message = FALSE}
+by_year_continent <- gapminder %>% 
+                        group_by(continent, year) %>%
+                        summarize(medianGdpPercap = median(gdpPercap))
+
+ggplot(by_year_continent, aes(x = year, y = medianGdpPercap, color = continent)) +
+    geom_point() +
+    expand_limits(y = 0)
+```
+
+La instrucción **expand_limits(y = 0)** configura el eje Y del gráfico para que empiece en 0.
+
+\newpage
+
+# Tipos de gráficos
+
+## Diagramas de líneas
+
+Los diagramas de líneas resultan útiles para estudiar la variación de una variable a lo largo del tiempo. Se construyen de manera similar a un gráfico de dispersión, con la diferencia de que se utiliza **geom_line()** en lugar de **geom_point()**.
+
+```{r}
+ggplot(by_year_continent, aes(x = year, y = medianGdpPercap, color = continent)) +
+    geom_line() +
+    expand_limits(y = 0)
+```
+
+\newpage
+
+## Gráfico de barras
+Los gráficos de barras resultan útiles para comparar valores entre categorías discretas. Para crear un gráfico de barras se emplea la instrucción **geom_col()**
+
+```{r, message = FALSE}
+by_continent <- gapminder%>%
+                  filter(year == 2007) %>%
+                  group_by(continent) %>%
+                  summarize(meanLifeExp = mean(lifeExp))
+
+ggplot(by_continent, aes(x = continent, y = meanLifeExp)) + 
+  geom_col()
+```
+
+\newpage
+
+## Histogramas
+
+Los histogramas permiten la visualización de la distribución de una variable. Se declaran con la instrucción **geom_histogram()**.
+
+```{r}
+ggplot(gapminder_2007, aes(x = lifeExp)) +
+  geom_histogram()
+```
+
+\newpage
+
+La anchura de cada barra se ajusta automáticamente; para establecer un valor específico, se utiliza el parámetro \texttt{binwidth} dentro de **geom_histogram()**.
+
+```{r}
+ggplot(gapminder_2007, aes(x = lifeExp)) +
+  geom_histogram(binwidth = 5)
+```
+
+\newpage
+
+También se puede modificar el número de barras con el parámetro \texttt{bins} dentro de **geom_histogram()**.
+
+```{r}
+ggplot(gapminder_2007, aes(x = lifeExp)) +
+  geom_histogram(bins = 5)
+```
+
+\newpage
+
+## Gráfico de bigotes
+
+Un gráfico de bigotes proporciona información sobre la distribución de un conjunto de datos y muestra de manera resumida cinco estadísticas clave: el valor mínimo, el percentil 25 (Q1), la mediana (Q2), el percentil 75 (Q3) y el valor máximo, además de visualizar los valores atípicos si los hubiera. Se declara con la instrucción **geom_boxplot()**.
+
+```{r}
+ggplot(gapminder_2007, aes(x = continent, y = lifeExp)) +
+  geom_boxplot()
+```

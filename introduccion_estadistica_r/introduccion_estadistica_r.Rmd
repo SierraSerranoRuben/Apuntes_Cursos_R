@@ -1,0 +1,815 @@
+---
+title: "Introducción a la Estadística en R"
+author: "Rubén Sierra Serrano"
+date: "2024-03-28"
+output:
+  pdf_document:
+    toc: true
+  html_document:
+    toc: true
+    df_print: paged
+  word_document:
+    toc: true
+header-includes: 
+- \usepackage{makeidx}
+- \makeindex
+- \renewcommand{\contentsname}{Índice}
+- \renewcommand{\tablename}{Tabla}
+- \usepackage{pgfplots}
+- \usepgfplotslibrary{statistics, fillbetween}
+- \pgfplotsset{compat=1.8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+food_consumption <- readRDS("food_consumption.rds")
+sales <- readRDS("sales.rds")
+world_happiness <- readRDS("world_happiness_sugar.rds")
+```
+
+# Estadística Básica
+
+A lo largo del documento se va a trabajar con el DataFrame $\texttt{food}\_\texttt{consumption}$, \texttt{sales} y $\texttt{world}\_\texttt{happiness}$.
+
+## Cuartiles y cuantiles 
+
+Los cuartiles son puntos que dividen una distribución de datos en cuatro partes iguales, representando así el 25% de los datos en cada una de ellas. Hay tres cuartiles principales que dividen los datos en cuatro partes:
+
++ El primer cuartil (Q1) es el valor que separa el 25% inferior de los datos del 75% superior.
++ El segundo cuartil (Q2) es el mismo que la mediana, que separa los datos en dos partes iguales, dejando el 50% de los datos a cada lado.
++ El tercer cuartil (Q3) es el valor que separa el 75% inferior de los datos del 25% superior.
+
+Los cuantiles son puntos que dividen una distribución de datos en partes iguales, representando así un porcentaje específico de los datos en cada una de ellas. Los cuartiles son un tipo específico de cuantiles (dividen los datos en cuatro partes iguales), pero los cuantiles pueden dividir los datos en cualquier número de partes iguales. Por ejemplo, los percentiles son cuantiles que dividen los datos en cien partes iguales y los deciles dividen los datos en diez partes iguales.
+
+Los quintiles son un tipo específico de cuantiles que dividen una distribución de datos en cinco partes iguales, representando así el 20% de los datos en cada una de ellas.
+
+La función **quantile()** del paquete \texttt{dplyr} permite calcular los cuantiles. Por defecto, calcula los cuartiles. Al especificar el argumento \texttt{probs}, se pueden definir cualquier cantidad de valores entre 0 y 1 para obtener los cuantiles correspondientes.
+
+```{r}
+quantile(food_consumption$co2_emission)
+quantile(food_consumption$co2_emission, probs = c(0,0.2,0.4,0.6,0.8,1))
+quantile(food_consumption$co2_emission, probs = seq(0,1,0.1))
+```
+
+\newpage
+
+## Rango intercuartílico y outliers
+
+El rango intercuartílico ($IQR$) es una medida de dispersión que se calcula restando el tercer cuartil ($Q3$) del primer cuartil ($Q1$) de un conjunto de datos, es decir, $IQR = Q3 - Q1$.
+
+Los \textit{outliers} (valores atípicos) son puntos de datos que se encuentran significativamente alejados del resto de los datos en un conjunto y que no se relacionan con otros. Estos valores pueden deberse a errores de medición, variabilidad natural en los datos o a circunstancias especiales. 
+
+Un criterio para identificar valores atípicos como aquellos que están por debajo de $Q1 - 1.5 \cdot IQR$ o por encima de $Q3 + 1.5 \cdot IQR$.
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}
+    % Dibujo del boxplot
+    \draw (1.25,0) -- (8.5,0); % Linea base
+    \draw (1.25,-0.2) -- (1.25,0.2); % Bigote izquierdo
+    \draw (8.5,-0.2) -- (8.5,0.2); % Bigote derecho
+    \draw[fill=blue!30] (3,-1) rectangle (6.5,1); % Caja
+    \draw (5,-1) -- (5,1); % Linea del Mediana
+    
+    % Dibujo de outliers
+    \draw[red, thick] (1,-0.5) -- (1,0.5); % Outlier izquierdo
+    \draw[red, thick] (9,-0.5) -- (9,0.5); % Outlier derecho
+    
+    % Etiquetas de texto
+    \node at (2.1,0.5) {$1.5 \cdot IQR$};
+    \node at (7.5,0.5) {$1.5 \cdot IQR$};
+    
+    \node[below] at (3,-1.25) {$Q1$};
+    \node[below, align = center] at (5,-1.25) {Mediana \\ $Q2$};
+    \node[below] at (6.5,-1.25) {$Q3$};
+    
+    \node[below] at (1,-0.5) {\textit{Outliers}};
+    \node[below] at (9,-0.5) {\textit{Outliers}};
+    
+    % Etiqueta del rango intercuartílico
+    \draw[<->] (3,1.5) -- (6.5,1.5);
+    \node[above] at (4.75,1.75) {Rango Intercuartílico ($IQR$)};
+\end{tikzpicture}
+\end{center}
+```
+
+```{r}
+emissions_by_country <- food_consumption %>%
+  group_by(country) %>%
+  summarize(total_emission = sum(co2_emission))
+
+q1 <- quantile(emissions_by_country$total_emission, 0.25)
+q3 <- quantile(emissions_by_country$total_emission, 0.75)
+iqr <- q3 - q1
+
+lower <- q1 - 1.5 * iqr
+upper <- q3 + 1.5 * iqr
+
+emissions_by_country %>%
+  filter(total_emission < lower | total_emission > upper)
+```
+
+\newpage
+
+## Varianza y desviación estándar
+
+La varianza y la desviación estándar son medidas de dispersión que se utilizan en estadística para describir la distribución de un conjunto de datos. 
+
+1. Varianza: La varianza es una medida de la dispersión de los datos respecto a la media. Se calcula como la media de los cuadrados de las diferencias entre cada dato y la media del conjunto. En R se calcula con la función **var()**. Formalmente, si tenemos un conjunto de datos \( X = \{x_1, x_2, ..., x_n\} \) con media \( \bar{x} \), la varianza (\( \sigma^2 \)) se calcula mediante la fórmula:
+
+   \[
+   \sigma^2 = \frac{\sum_{i=1}^{n}(x_i - \bar{x})^2}{n}
+   \]
+
+   Donde:
+      - \( x_i \) son los elementos del conjunto de datos.
+      - \( \bar{x} \) es la media del conjunto de datos.
+      - \( n \) es el número de elementos en el conjunto de datos.
+
+2. Desviación estándar: La desviación estándar es la raíz cuadrada de la varianza. Se utiliza comúnmente porque está en las mismas unidades que los datos originales y resulta más sencillo de interpretar. En R se calcula con la función **sd()**. Se denota comúnmente por \( \sigma \) o \( s \), dependiendo de si se refiere a la población o a la muestra, respectivamente. La fórmula para la desviación estándar (\( \sigma \) o \( s \)) es:
+
+   \[
+   \sigma = \sqrt{\sigma^2} = \sqrt{\frac{\sum_{i=1}^{n}(x_i - \bar{x})^2}{n}}
+   \]
+
+   Donde:
+      - \( \sigma^2 \) es la varianza.
+      - \( \sigma \) es la desviación estándar.
+
+En resumen, la varianza mide la dispersión total de los datos, mientras que la desviación estándar mide la dispersión promedio de los datos respecto a la media.
+
+
+```{r}
+food_consumption %>% 
+  group_by(food_category) %>% 
+  summarize(var_co2 = var(co2_emission),
+            sd_co2 = sd(co2_emission))
+``` 
+
+\newpage
+
+# Probabilidad y distribuciones
+
+## Probabilidad
+
+La probabilidad de un evento se puede calcular tomando el número de veces en que el evento puede ocurrir y dividiéndolo por el número total de resultados posibles. Es decir, la probabilidad de un evento es una medida numérica que indica la posibilidad de que dicho evento ocurra en relación con el conjunto completo de resultados posibles.
+
+\begin{align*}
+  \textit{P}(\text{Evento}) = \frac{\text{Número de veces en que el evento puede ocurrir}}{\text{Total de resultados posibles}}
+\end{align*}
+
+El DataFrame \texttt{sales} tiene la siguiente forma:
+
+```{r}
+glimpse(sales)
+```
+
+La función **sample_n()** sirve para escoger $x$ elementos del DataFrame de forma pseudo-aleatoria.
+
+```{r}
+sales %>%
+  sample_n(5)
+```
+
+Al realizar otra vez el experimento obtendremos distintos resultados:
+
+```{r}
+sales %>%
+  sample_n(5)
+```
+
+\newpage
+
+La función **set.seed()** sirve para establecer una semilla para generar números pseudoaleatorios. Al establecer una semilla, se garantiza que se obtendrán los mismos resultados "aleatorios" cada vez que se ejecute el código.
+
+```{r}
+set.seed(42)
+sales %>%
+  sample_n(1)
+
+set.seed(42)
+sales %>%
+  sample_n(1)
+```
+
+La función **sample_n()** posee el argumento \texttt{replace} que de manera predeterminada adopta el valor \texttt{FALSE}. Sin embargo, al proporcionarle el valor \texttt{TRUE}, la función tomará las muestras con reemplazo.
+
+```{r}
+sales %>%
+  sample_n(5, replace = TRUE)
+```
+\newpage
+
+## Distribuciones discretas
+
+Una distribución de probabilidad muestra cómo se distribuyen las probabilidades entre los diferentes resultados posibles de un experimento aleatorio. El área bajo la curva de una distribución de probabilidad representa la probabilidad de que ocurra un evento particular o una combinación de eventos. En otras palabras, la integral (o suma, en el caso discreto) de la función de densidad de probabilidad sobre un rango específico de valores corresponde a la probabilidad de que el resultado del experimento aleatorio esté dentro de ese rango.
+
+En el caso de una distribución de probabilidad discreta, se refiere a una distribución en la que las posibles ocurrencias son contables o discretas, es decir, hay un número finito o infinito numerable de resultados posibles.
+
+Se puede visualizar una distribución de probabilidad discreta con un gráfico de barras; para variables continuas se emplearía un histograma:
+
+```{r}
+ggplot(sales, aes(x = product)) +
+  geom_bar() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+```
+
+\newpage
+
+Las probabilidades de la distribución son: 
+
+```{r}
+distribucion <- sales %>%
+  count(product) %>%
+  mutate(probabilidad = n / sum(n))
+
+distribucion
+```
+
+Nótese que al calcular la suma, podemos obtener la probabilidad de obtener un producto dentro de una categoría específica.
+
+```{r}
+distribucion %>%
+  filter(product %in% c("Product A","Product B","Product C")) %>%
+  summarize(prob_A_B_C = sum(probabilidad))
+```
+
+
+En el ejemplo anterior, la probabilidad de que el producto elegido sea uno de los productos A, B o C es de aproximadamente el 56%.
+
+Una distribución de probabilidad uniforme discreta es un tipo de distribución de probabilidad que modela un conjunto finito de posibles resultados, donde cada resultado tiene la misma probabilidad de ocurrir.
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}
+    % Ejes
+    \draw[->] (0,0) -- (7,0) node[below] {$x$};
+    \draw[->] (0,0) -- (0,3) node[left] {$P(X=x)$};
+    % Etiquetas x
+    \foreach \x in {1,2,3,4,5,6}
+        \draw (\x,1pt) -- (\x,-3pt) node[anchor=north] {$\x$};
+    % Etiquetas y
+    \foreach \y in {0.1,0.2}
+        \draw (1pt,\y*10) -- (-3pt,\y*10) node[anchor=east] {$\y$};
+    % Barras
+    \foreach \x/\y in {1/0.166,2/0.166,3/0.166,4/0.166,5/0.166,6/0.166}
+        \draw (\x-0.4,0) rectangle (\x+0.4,\y*10);
+\end{tikzpicture}
+\end{center}
+```
+
+\newpage
+
+## Distribuciones continuas
+
+En el caso de una distribución de probabilidad continua, se refiere a una distribución en la que las posibles ocurrencias son incontables o continuas, es decir, hay un número infinito no numerable de resultados posibles.
+
+Existe el equivalente a las distribuciones de probabilidad uniformes discretas en el caso continuo; al igual que en su análogo discreto, cada resultado tiene la misma probabilidad de ocurrir. El área bajo la curva de dicha distribución es la probabilidad de que dicho evento ocurra.
+
+```{=tex}
+$$
+f(x) = \begin{cases}
+\displaystyle \frac{1}{b-a} & \text{si } a \leq x \leq b \\
+\begin{array}{@{}c@{}} 0 \end{array} & \text{si } x < a \text{ o } x > b
+\end{cases}
+$$
+```
+
+Un ejemplo de distribución uniforma continua con $a = 0$ y $b = 1$
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}
+    \begin{axis}[
+        axis lines = left,
+        xlabel = $x$,
+        ylabel = {$f(x)$},
+        ]
+    % Dibuja la función de densidad de probabilidad uniforme
+    \addplot [
+        domain=0:1, 
+        samples=100, 
+        color=red,
+    ]
+    {1};
+    \addlegendentry{$f(x)=1$ para $0\leq x\leq1$}
+    % Dibuja las líneas que delimitan el área bajo la curva
+    \draw [dashed] (axis cs:1,1) -- (axis cs:1,0);
+    \end{axis}
+\end{tikzpicture}
+\end{center}
+```
+
+Si se quiere conocer el valor de $P(X \leq x)$ para un $x \in [a, b]$ habría que calcular el área $\int^{x}_{a}{\frac{1}{b-a} dx}$. En el siguiente gráfico se muestra $P(X \leq 0.6)$ dada la función uniforme previamente declarada:
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}
+    \begin{axis}[
+        axis lines = left,
+        xlabel = $x$,
+        ylabel = {$f(x)$},
+    ]
+    % Dibuja la función de densidad de probabilidad uniforme
+    \addplot [
+        domain=0:1, 
+        samples=100, 
+        color=red,
+    ]
+    {1};
+    \addlegendentry{$f(x)=1$ para $0\leq x\leq1$}
+
+    % Dibuja las líneas que delimitan el área bajo la curva
+    \draw [dashed] (axis cs:1,1) -- (axis cs:1,0);
+    
+    % Agrega la línea punteada para 0.6
+    \draw [dashed] (axis cs:0.6,1) -- (axis cs:0.6,0);
+    
+    % Resalta el área bajo la curva hasta 0.6
+    % Dibuja un rectángulo de relleno
+    \fill [blue, opacity=0.2] (axis cs:0,0) rectangle (axis cs:0.6,1);
+    \end{axis}
+\end{tikzpicture}
+\end{center}
+```
+
+\newpage
+
+La función **punif()** calcula la probabilidad de que una variable aleatoria con distribución uniforme en un intervalo sea menor o igual que x.
+
+```{r}
+min <- 0
+max <- 1
+punif(0.6, min = min, max = max)
+```
+
+En el siguiente gráfico se muestra $P(X > 0.6)$ dada la función uniforme previamente declarada:
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}
+    \begin{axis}[
+        axis lines = left,
+        xlabel = $x$,
+        ylabel = {$f(x)$},
+    ]
+    % Dibuja la función de densidad de probabilidad uniforme
+    \addplot [
+        domain=0:1, 
+        samples=100, 
+        color=red,
+    ]
+    {1};
+    \addlegendentry{$f(x)=1$ para $0\leq x\leq1$}
+
+    % Dibuja las líneas que delimitan el área bajo la curva
+    \draw [dashed] (axis cs:1,1) -- (axis cs:1,0);
+    
+    % Agrega la línea punteada para 0.6
+    \draw [dashed] (axis cs:0.6,1) -- (axis cs:0.6,0);
+    
+    % Resalta el área bajo la curva desde 0.6 hasta el final
+    % Dibuja un rectángulo de relleno
+    \fill [blue, opacity=0.2] (axis cs:0.6,0) rectangle (axis cs:1,1);
+    \end{axis}
+\end{tikzpicture}
+\end{center}
+```
+
+El argumento $\texttt{lower.tail}$ de **punif()** es un parámetro booleano opcional que especifica si se debe calcular la probabilidad acumulativa en la "cola inferior" de la distribución o en la "cola superior". Por defecto, tiene el valor \texttt{TRUE}, lo que significa que devuelve la probabilidad de que la variable aleatoria sea menor o igual a $x$. Si se especifica con el valor \texttt{FALSE}, devuelve la probabilidad acumulativa de que la variable aleatoria sea mayor que $x$.
+
+```{r}
+punif(0.6, min = min, max = max, lower.tail = FALSE)
+```
+
+Nótese que $P(X > x) = 1-P(X \leq x)$
+
+```{r}
+1 - punif(0.6, min = min, max = max)
+```
+
+\newpage
+Para calcular la probabilidad acumulativa para un subintervalo tal que $a,b\notin[c,d]$ dentro del intervalo original $[a,b]$ se emplearía la expresión $P(c \leq X \leq d) = P(X \leq d) - P(X \leq c)$. En el siguiente gráfico se muestra $P(0.2 \leq X \leq 0.6)$ dada la función uniforme previamente declarada:
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}
+    \begin{axis}[
+        axis lines = left,
+        xlabel = $x$,
+        ylabel = {$f(x)$},
+    ]
+    % Dibuja la función de densidad de probabilidad uniforme
+    \addplot [
+        domain=0:1, 
+        samples=100, 
+        color=red,
+    ]
+    {1};
+    \addlegendentry{$f(x)=1$ para $0\leq x\leq1$}
+
+    % Dibuja las líneas que delimitan el área bajo la curva
+    \draw [dashed] (axis cs:1,1) -- (axis cs:1,0);
+    
+    % Agrega las líneas punteadas para 0.2 y 0.6
+    \draw [dashed] (axis cs:0.2,1) -- (axis cs:0.2,0);
+    \draw [dashed] (axis cs:0.6,1) -- (axis cs:0.6,0);
+    
+    % Resalta el área bajo la curva entre 0.2 y 0.6
+    % Dibuja un rectángulo de relleno
+    \fill [blue, opacity=0.2] (axis cs:0.2,0) rectangle (axis cs:0.6,1);
+    \end{axis}
+\end{tikzpicture}
+\end{center}
+```
+
+
+```{r}
+punif(0.6, min = min, max = max) - punif(0.2, min = min, max = max)
+```
+
+La función **runif()** se utiliza para generar números aleatorios que siguen una distribución uniforme continua en un intervalo específico.
+
+```{r}
+runif(n = 5, min = min, max = max)
+```
+Donde:
+```{=tex}
+\begin{itemize}
+\item \texttt{n} es el número de valores aleatorios a generar.
+\item \texttt{min} es el límite inferior del intervalo de la distribución uniforme.
+\item \texttt{max} es el límite superior del intervalo de la distribución uniforme.
+\end{itemize}
+```
+
+\newpage
+
+## Distribución binomial
+
+La distribución binomial describe la probabilidad de obtener un número específico de éxitos en un número fijo de $n$ ensayos independientes, donde cada ensayo tiene dos resultados posibles: éxito o fracaso. Es un tipo de distribución discreta.
+
+```{=tex}
+\begin{center}
+  $P(X=k)={n \choose k}\,p^{k}(1-p)^{n-k}$
+\end{center}
+
+\text{Donde:}
+
+\begin{itemize}
+    \item $n$: Es el número total de ensayos o experimentos.
+    \item $k$: Es el número de éxitos que se desean obtener en los $n$ ensayos.
+    \item $p$: Es la probabilidad de éxito en un solo ensayo.
+    \item $(1-p)$ (o $q$): Es la probabilidad de fracaso en un solo ensayo.
+    \item ${n \choose k}$: Representa el coeficiente binomial, que se calcula como $\frac{n!}{k!(n-k)!}$.
+\end{itemize}
+```
+
+Ejemplo de gráfica de distribución binomial con $n = 10$ y $p = 0.5$:
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    ybar,
+    bar width=15pt,
+    xlabel={$k$},
+    ylabel={$P(X=k)$},
+    xmin=-0.5,
+    xmax=10.5,
+    ymin=0,
+    ymax=0.3,
+    xtick={0,...,10},
+    xtick style={draw=none}, % Elimina los "pelillos" de los ticks del eje x
+    ytick style={draw=none}, % Elimina los "pelillos" de los ticks del eje y
+    xticklabel style={/pgf/number format/fixed},
+    yticklabel style={/pgf/number format/fixed},
+    %axis line style={draw=none}, % Elimina el borde del gráfico
+    %tickwidth=0pt, % Elimina los "pelillos" de los ticks en ambos ejes
+    ymajorgrids, % Agrega líneas de cuadrícula en el eje y
+    %grid style={gray,opacity=0.5,dashed}, % Estilo de las líneas de cuadrícula
+]
+
+\addplot[
+    samples at={0,...,10},
+    fill=blue!50,
+] {
+    factorial(10) / (factorial(x) * factorial(10-x)) * pow(0.5,x) * pow(0.5,10-x)
+};
+\end{axis}
+\end{tikzpicture}
+\end{center}
+```
+
+
+La función **pbinom()** se utiliza para calcular la probabilidad acumulativa de una distribución binomial en un cierto punto $P(X \leq x)$.
+
+```{r}
+pbinom(q = 3, size = 10, prob = 0.5, lower.tail = FALSE)
+```
+Donde:
+
+- \texttt{q} es el valor en el que se evalúa la probabilidad acumulativa.
+- \texttt{size} es el número total de ensayos.
+- \texttt{prob} es la probabilidad de éxito en cada ensayo.
+- \texttt{lower.tail} es un parámetro booleano opcional que especifica si se calcula la probabilidad acumulativa en la "cola inferior" de la distribución o en la "cola superior". Por defecto, \texttt{lower.tail} = \texttt{TRUE} calcula la probabilidad de que el número de éxitos sea menor o igual a \texttt{q}. Funciona igual que con **punif()**.
+
+\newpage
+
+La función **dbinom()** permite conocer la probabilidad de que la variable aleatoria tome un valor concreto dado un número de ensayos y la probabilidad de éxito $P(X = x)$.
+
+```{r}
+pbinom(q = 3, size = 10, prob = 0.5)
+```
+Donde:
+
+- \texttt{q} es el valor en el que se evalúa la probabilidad.
+- \texttt{size} es el número total de ensayos.
+- \texttt{prob} es la probabilidad de éxito en cada ensayo.
+
+La función **rbinom()** se utiliza para generar números aleatorios que siguen una distribución binomial.
+
+```{r}
+rbinom(n = 5, size = 10, prob = 0.5)
+```
+
+Donde:
+
+```{=tex}
+\begin{itemize}
+\item \texttt{n} es el número de valores aleatorios a generar.
+\item \texttt{size} es el número total de ensayos.
+\item \texttt{prob} es la probabilidad de éxito de cada ensayo.
+\end{itemize}
+```
+
+\newpage
+
+## Distribución normal
+
+La distribución normal es una de las distribuciones estadísticas más importantes debido a su capacidad para modelar una amplia variedad de fenómenos naturales y sociales que exhiben comportamientos aleatorios.Se trata de una distribución de variable continua y se define completamente por dos parámetros: la media, que determina la ubicación del centro de la campana, y la desviación estándar, que describe la dispersión de los datos alrededor de la media.
+
+Su función de densidad sigue la forma:
+
+```{=tex}
+\begin{center}
+  $f(x) ={\displaystyle {\frac {1}{\sigma {\sqrt {2\pi }}}}\;e^{-{\frac {(x-\mu )^{2}}{2\sigma ^{2}}}}\,\!}$
+\end{center}
+```
+
+donde:
+
+- $\sigma$ es la desviación típica.
+- $\sigma^2$ es la varianza.
+- $\mu$ es la media.
+
+La distribución normal tiene las siguientes propiedades importantes:
+
+- Simetría: La distribución normal es simétrica alrededor de su media, lo que significa que la mitad de la distribución está a la izquierda de la media y la otra mitad está a la derecha.
+
+- Media, mediana y moda iguales: En una distribución normal, la media, la mediana y la moda son todas iguales y están ubicadas en el mismo punto, que es la media de la distribución.
+
+- La forma de campana: La gráfica de la distribución normal tiene una forma de campana, con la densidad de probabilidad más alta en la media y disminuye simétricamente a medida que nos alejamos de la media, es decir, tiene una distribución unimodal.
+
+- Comportamiento asintótico en las colas: En las colas de la distribución normal, las curvas tienden asintóticamente hacia el eje $x$. Esto significa que a medida que nos alejamos infinitamente de la media, la probabilidad de que un valor caiga fuera de un rango dado se acerca a cero, pero nunca alcanza realmente cero.
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+  no markers,
+  domain=-3:3,
+  samples=100,
+  ymin=0,
+  ymax=0.42, % ajusta según necesites
+  axis lines*=left,
+  xlabel={$x$},
+  ylabel={$f(x)$},
+  height=6cm, % ajusta la altura
+  width=8cm, % ajusta la anchura
+  xtick=\empty,
+  ytick=\empty,
+  clip=false,
+  axis on top,
+  hide y axis,
+  enlargelimits=false,
+  xlabel style={at={(axis description cs:0.5,-0.1)},anchor=north}, % ajusta la etiqueta x
+  ylabel style={at={(axis description cs:-0.1,.5)},rotate=90,anchor=south}, % ajusta la etiqueta y
+  every axis y label/.style={at={(current axis.above origin)},anchor=east,font=\small}, % ajusta el tamaño y posición de la etiqueta y
+]
+
+\addplot [fill=blue!20, draw=none, domain=-3:3] {exp(-x^2/2)/sqrt(2*pi)} \closedcycle;
+\addplot [thick,blue] {exp(-x^2/2)/sqrt(2*pi)};
+
+% Añadir línea para la media
+\draw [ycomb, thick] (axis cs:0,0) -- (axis cs:0,{exp(-0^2/2)/sqrt(2*pi)+ 0.02});
+
+% Añadir etiqueta para la media
+\node[above] at (axis cs:0,{exp(-0^2/2)/sqrt(2*pi) + 0.02}) {$\mu$};
+
+\end{axis}
+\end{tikzpicture}
+\end{center}
+```
+
+\newpage
+
+La función **pnorm()** calcula la función de distribución acumulativa de la distribución normal, es decir, calcula $P(X \leq x)$.
+
+```{r}
+pnorm(q = 62, mean = 70, sd = 7, lower.tail = TRUE) 
+```
+
+Donde:
+
+- \texttt{q} es el valor en el que se evalúa la probabilidad acumulativa.
+- \texttt{mean} es la media de la distribución normal.
+- \texttt{sd} es la desviación estándar de la distribución normal.
+- \texttt{lower.tail} es un parámetro booleano opcional que especifica si se calcula la probabilidad acumulativa en la "cola inferior" de la distribución o en la "cola superior". Por defecto, \texttt{lower.tail} = \texttt{TRUE} calcula la probabilidad de que el número de éxitos sea menor o igual a \texttt{q}. Funciona igual que con **punif()** y **pbinom()**.
+
+La función **dnorm()** permite conocer la probabilidad de que la variable aleatoria tome un valor concreto dado un número de ensayos y la probabilidad de éxito $P(X = x)$.
+
+```{r}
+dnorm(x = 60, mean = 70, sd = 7)
+```
+Donde:
+
+- \texttt{x} es el valor en el que se evalúa la probabilidad.
+- \texttt{mean} es la media de la distribución normal.
+- \texttt{sd} es la desviación estándar de la distribución normal.
+
+La función **rnorm()** se utiliza para generar números aleatorios que siguen una distribución binomial.
+
+```{r}
+rnorm(n = 5, mean = 70, sd = 7)
+```
+
+### Teorema central del límite
+
+Una muestra aleatoria de tamaño $n$ proveniente de una población con una media $\mu$ y una desviación estándar $\sigma$.Entonces, cuando $n$ se vuelve suficientemente grande, la distribución de la media muestral $\bar{X}$ se aproxima a una distribución normal con una media $\mu$ y una desviación estándar $\sigma$.
+
+```{=tex}
+\begin{center}
+${\textstyle Z=\lim _{n\to \infty }{\left({\frac {{\bar {X}}_{n}-\mu }{\sigma _{\bar {X}}}}\right)}}, \text{ con } {\displaystyle \sigma _{\bar {X}}=\sigma /{\sqrt {n}}}$
+\end{center}
+```
+
+Para estudiar dicho teorema en R, resulta de gran utilidad la función **replicate()**. Esta función repite un número $n$ de veces una expresión especificada en ella.
+
+\newpage
+
+En el siguiente ejemplo, se muestra la aplicación del teorema central del límite al experimento aleatorio de calcular la media de cinco tiradas de un dado sin trucar de seis caras; se puede observar la similitud cada vez más palpable de la distribución con una normal con el aumento de muestras:
+
+```{r}
+set.seed(42)
+dado <- 1:6
+
+generar_datos <- function(n) {
+  replicate(n, sample(dado, 5, replace = TRUE) %>% mean())
+}
+
+datos_100 <- data.frame(tlm = generar_datos(100), grupo = '100 tiradas')
+datos_1000 <- data.frame(tlm = generar_datos(1000), grupo = '1000 tiradas')
+datos_10000 <- data.frame(tlm = generar_datos(10000), grupo = '10000 tiradas')
+
+datos <- rbind(datos_100, datos_1000, datos_10000)
+
+ggplot(datos, aes(x = tlm)) +
+  geom_histogram(bins = 25) +
+  facet_wrap(~ grupo, scales = "free_y") +
+  ggtitle("Distribución de las medias de tiradas de un dado") +
+  xlab("Media de tiradas") +
+  ylab("Frecuencia")
+```
+
+\newpage
+
+## Distribución de Poisson
+
+La distribución de Poisson es una distribución de probabilidad discreta que expresa, a partir de una frecuencia de ocurrencia media, la probabilidad de que ocurra un determinado número de eventos durante cierto período de tiempo. Su función de probabilidad viene definida por la expresión:
+
+```{=tex}
+\begin{center}
+${\displaystyle f(k;\lambda )=\Pr(X{=}k)={\frac {\lambda ^{k}e^{-\lambda }}{k!}}}$
+\end{center}
+```
+
+Donde:
+
+- $\lambda$ es la media del número de sucesos en el intervalo que estemos tomando.
+- k es el número de ocurrencias del suceso. 
+
+```{=tex}
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    ybar,
+    bar width=20pt,
+    xlabel={$x$},
+    ylabel={$P(X=x)$},
+    ymin=0,
+    ymax=0.3,
+    xtick=data,
+    axis x line=bottom,
+    axis y line=left,
+    enlarge x limits=0.2,
+    symbolic x coords={0,1,2,3,4,5,6,7,8},
+    ]
+    \addplot+[ycomb, fill=blue!40] plot coordinates {
+        (0,0.0498)
+        (1,0.1494)
+        (2,0.2240)
+        (3,0.2240)
+        (4,0.1680)
+        (5,0.1008)
+        (6,0.0504)
+        (7,0.0216)
+        (8,0.0081)
+    };
+\end{axis}
+\end{tikzpicture}
+\end{center}
+```
+
+La función **ppois()** calcula la función de distribución acumulativa de la distribución normal, es decir, calcula $P(X \leq x)$.
+
+```{r}
+ppois(q = 62, lambda = 70, lower.tail = TRUE) 
+```
+
+Donde:
+
+- \texttt{q} es el valor en el que se evalúa la probabilidad acumulativa.
+- \texttt{lambda} es la media de la frecuencia de las ocurriencias.
+- \texttt{lower.tail} es un parámetro booleano opcional que especifica si se calcula la probabilidad acumulativa en la "cola inferior" de la distribución o en la "cola superior". Por defecto, \texttt{lower.tail} = \texttt{TRUE} calcula la probabilidad de que el número de éxitos sea menor o igual a \texttt{q}. Funciona igual que en las anteriores distribuciones.
+
+\newpage
+
+La función **dpois()** permite conocer la probabilidad de que la variable aleatoria tome un valor concreto dado un número de ensayos y la probabilidad de éxito $P(X = k)$.
+
+```{r}
+dpois(x = 60, lambda = 70)
+```
+
+Donde:
+
+- \texttt{x} es el valor en el que se evalúa la probabilidad.
+- \texttt{lambda} es la media de la frecuencia de las ocurriencias.
+
+La función **rpois()** se utiliza para generar números aleatorios que siguen una distribución de Poisson.
+
+```{r}
+rpois(n = 5, lambda = 70)
+```
+
+\newpage
+
+# Correlación
+
+La correlación de Pearson mide la fuerza y dirección de una relación lineal entre dos variables continuas. Esta correlación varía entre -1 y 1:
+
+- Una correlación de 1 indica una correlación positiva perfecta: cuando una variable aumenta, la otra también lo hace de manera proporcional.
+- Una correlación de -1 indica una correlación negativa perfecta: cuando una variable aumenta, la otra disminuye de manera proporcional.
+- Una correlación de 0 indica ausencia de correlación lineal. 
+
+Una manera de visualizar la correlación entre dos variables es graficando la nube de puntos. Además, al aplicar la función geom_smooth() se grafica una línea de tendencia suavizada en el gráfico de dispersión. Dicha función tiene dos argumentos de suma importancia:
+
+- \texttt{method}: especifica el método que se emplea para ajustar la línea de tendencia. El valor $\texttt{"lm"}$ indica que se utiliza el método de mínimos cuadrados lineales.
+- \texttt{se}: argumento que toma valores booleanos y controla si se muestra o no el intervalo de confianza alrededor de la línea de tendencia.
+```{r}
+ggplot(world_happiness, aes(life_exp, happiness_score)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+```
+
+Y la función **cor()** calcula el valor numérico de dicha correlación:
+
+```{r}
+cor(world_happiness$life_exp, world_happiness$happiness_score)
+```
+
+Es importante destacar que el índice de correlación de Pearson solo mide la correlación lineal entre dos variables. Por lo tanto, puede ser necesario aplicar técnicas de transformación de datos, como pasarlos a escala logarítmica con **log()**, aplicar la raíz cuadrada con **sqrt()**, o la transformación recíproca $\frac{1}{x}$ con **1/x**.
+
+```{r}
+ggplot(world_happiness, aes(x = gdp_per_cap, y = happiness_score)) +
+    geom_point()
+```
+
+\newpage
+
+La gráfica anterior no muestra una relación lineal; debido a su forma que se asemeja a una función logarítmica, resulta interesante considerar una transformación logarítmica.
+
+```{r}
+ggplot(world_happiness, aes(x = log(gdp_per_cap), y = happiness_score)) +
+    geom_point() +
+    geom_smooth(method = "lm", se = FALSE)
+
+cor(world_happiness$happiness_score, log(world_happiness$gdp_per_cap))
+```
